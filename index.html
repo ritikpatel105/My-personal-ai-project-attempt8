@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0">
+
+<title>SHREE AI</title>
+
+<style>
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+}
+
+body{
+    min-height:100vh;
+    background:#020608;
+    color:white;
+    font-family:Arial,sans-serif;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+.app{
+    width:92%;
+    max-width:500px;
+    text-align:center;
+}
+
+.title{
+    font-size:42px;
+    letter-spacing:7px;
+    color:#00eaff;
+    text-shadow:
+        0 0 10px #00eaff,
+        0 0 30px #00eaff;
+    margin-bottom:35px;
+}
+
+.core{
+    width:210px;
+    height:210px;
+    margin:auto;
+    border:3px solid #00eaff;
+    border-radius:50%;
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+    font-size:30px;
+    font-weight:bold;
+    color:#00eaff;
+
+    box-shadow:
+        0 0 20px #00eaff,
+        0 0 60px #00eaff,
+        inset 0 0 25px #00eaff;
+
+    transition:0.3s;
+}
+
+.core.listening{
+    animation:pulse 1s infinite;
+}
+
+.core.speaking{
+    animation:speakPulse 0.7s infinite;
+}
+
+.core.awake{
+    box-shadow:
+        0 0 30px #00eaff,
+        0 0 90px #00eaff,
+        inset 0 0 35px #00eaff;
+}
+
+@keyframes pulse{
+
+    50%{
+        transform:scale(1.08);
+
+        box-shadow:
+            0 0 40px #00eaff,
+            0 0 110px #00eaff;
+    }
+
+}
+
+@keyframes speakPulse{
+
+    50%{
+        transform:scale(1.05);
+
+        box-shadow:
+            0 0 35px #00eaff,
+            0 0 100px #00eaff;
+    }
+
+}
+
+#status{
+    margin-top:30px;
+    color:#00eaff;
+    font-size:18px;
+    min-height:25px;
+}
+
+#heard{
+    margin-top:18px;
+    color:#bbb;
+    font-size:16px;
+    min-height:45px;
+}
+
+.buttons{
+    margin-top:15px;
+}
+
+button{
+    margin:6px;
+    padding:13px 18px;
+
+    background:transparent;
+    color:#00eaff;
+
+    border:2px solid #00eaff;
+    border-radius:10px;
+
+    font-size:14px;
+    font-weight:bold;
+
+    cursor:pointer;
+}
+
+button:active{
+    transform:scale(0.95);
+}
+
+.small{
+    margin-top:25px;
+    color:#777;
+    font-size:12px;
+}
+
+</style>
+</head>
+
+
+<body>
+
+<div class="app">
+
+    <div class="title">SHREE</div>
+
+    <div id="core" class="core">
+        SHREE
+    </div>
+
+    <div id="status">
+        SHREE is sleeping...
+    </div>
+
+    <div id="heard">
+        No command received.
+    </div>
+
+    <div class="buttons">
+
+        <button onclick="wakeShree()">
+            ⚡ WAKE UP
+        </button>
+
+        <button onclick="startListening()">
+            🎙️ LISTEN
+        </button>
+
+        <button onclick="stopListening()">
+            ⏹ STOP
+        </button>
+
+    </div>
+
+    <div class="small">
+        SHREE Personal AI
+    </div>
+
+</div>
+
+
+<script>
+
+/* =========================================================
+   SHREE CONFIG
+========================================================= */
+
+let recognition = null;
+let isAwake = false;
+let isListening = false;
+let voices = [];
+
+
+const core = document.getElementById("core");
+const status = document.getElementById("status");
+const heard = document.getElementById("heard");
+
+
+/* =========================================================
+   VOICE LOADING
+========================================================= */
+
+function loadVoices(){
+
+    if(!("speechSynthesis" in window)){
+        return;
+    }
+
+    voices = speechSynthesis.getVoices();
+
+    console.log(
+        "Available voices:",
+        voices
+    );
+}
+
+loadVoices();
+
+if("speechSynthesis" in window){
+
+    speechSynthesis.onvoiceschanged =
+        loadVoices;
+
+}
+
+
+/* =========================================================
+   TEXT TO SPEECH — FIXED
+========================================================= */
+
+function speak(text){
+
+    console.log(
+        "SHREE:",
+        text
+    );
+
+    if(!("speechSynthesis" in window)){
+
+        status.innerText =
+            "Speech output is not supported.";
+
+        return;
+    }
+
+    try{
+
+        /*
+           Stop any previous speech.
+        */
+
+        speechSynthesis.cancel();
+
+
+        /*
+           Create new speech.
+        */
+
+        const utterance =
+            new SpeechSynthesisUtterance(
+                String(text)
+            );
+
+
+        /*
+           Don't force a specific voice.
+           Android/Chrome will use an available
+           system voice.
+        */
+
+        utterance.lang = "en-US";
+        utterance.volume = 1;
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+
+
+        utterance.onstart =
+            function(){
+
+                core.classList.add(
+                    "speaking"
+                );
+
+                status.innerText =
+                    "🔊 SHREE is speaking...";
+            };
+
+
+        utterance.onend =
+            function(){
+
+                core.classList.remove(
+                    "speaking"
+                );
+
+                status.innerText =
+                    isAwake
+                    ? "SHREE is ready."
+                    : "SHREE is sleeping...";
+            };
+
+
+        utterance.onerror =
+            function(event){
+
+                console.log(
+                    "Speech error:",
+                    event.error
+                );
+
+                core.classList.remove(
+                    "speaking"
+                );
+
+                /*
+                   cancel() can generate a
+                   canceled error. Ignore it.
+                */
+
+                if(
+                    event.error === "canceled"
+                ){
+
+                    return;
+                }
+
+                status.innerText =
+                    "Speech error: " +
+                    event.error;
+            };
+
+
+        /*
+           Small delay helps Android/Chrome
+           after speechSynthesis.cancel().
+        */
+
+        setTimeout(
+            function(){
+
+                try{
+
+                    speechSynthesis.speak(
+                        utterance
+                    );
+
+                }catch(error){
+
+                    console.log(
+                        "Speech exception:",
+                        error
+                    );
+
+                    core.classList.remove(
+                        "speaking"
+                    );
+
+                    status.innerText =
+                        "Speech could not start.";
+                }
+
+            },
+            150
+        );
+
+    }catch(error){
+
+        console.log(
+            "TTS exception:",
+            error
+        );
+
+        core.classList.remove(
+            "speaking"
+        );
+
+        status.innerText =
+            "Speech system error.";
+    }
+}
+
+
+/* =========================================================
+   WAKE SHREE
+========================================================= */
+
+function wakeShree(){
+
+    isAwake = true;
+
+    core.classList.add(
+        "awake"
+    );
+
+    status.innerText =
+        "SHREE is ready.";
+
+    speak(
+        "Yes sir. SHREE is ready."
+    );
+}
+
+
+/* =========================================================
+   SPEECH RECOGNITION
+========================================================= */
+
+function getSpeechRecognition(){
+
+    return window.SpeechRecognition ||
+           window.webkitSpeechRecognition ||
+           null;
+}
+
+
+/* =========================================================
+   REMOVE LISTENING STATE
+========================================================= */
+
+function removeListening(){
+
+    core.classList.remove(
+        "listening"
+    );
+}
+
+
+/* =========================================================
+   START LISTENING
+========================================================= */
+
+function startListening(){
+
+    const SpeechRecognition =
+        getSpeechRecognition();
+
+
+    if(!SpeechRecognition){
+
+        status.innerText =
+            "Speech recognition is not available.";
+
+        alert(
+            "Please use Google Chrome for voice recognition."
+        );
+
+        return;
+    }
+
+
+    if(isListening){
+        return;
+    }
+
+
+    recognition =
+        new SpeechRecognition();
+
+
+    recognition.lang =
+        "en-US";
+
+    recognition.continuous =
+        false;
+
+    recognition.interimResults =
+        false;
+
+    recognition.maxAlternatives =
+        3;
+
+
+    isListening = true;
+
+    core.classList.add(
+        "listening"
+    );
+
+    status.innerText =
+        "🎙️ SHREE is listening...";
+
+    heard.innerText =
+        "Speak now...";
+
+
+    recognition.onresult =
+        function(event){
+
+            const text =
+                event.results[0][0]
+                    .transcript
+                    .trim();
+
+
+            console.log(
+                "User:",
+                text
+            );
+
+
+            heard.innerText =
+                "You said: " +
+                text;
+
+
+            const command =
+                text.toLowerCase();
+
+
+            processCommand(
+                command
+            );
+        };
+
+
+    recognition.onerror =
+        function(event){
+
+            console.log(
+                "Recognition error:",
+                event.error
+            );
+
+
+            if(event.error === "not-allowed"){
+
+                status.innerText =
+                    "Microphone permission denied.";
+
+            }
+
+            else if(
+                event.error === "no-speech"
+            ){
+
+                status.innerText =
+                    "I didn't hear anything.";
+
+            }
+
+            else if(
+                event.error === "audio-capture"
+            ){
+
+                status.innerText =
+                    "Microphone not found.";
+
+            }
+
+            else{
+
+                status.innerText =
+                    "Voice error: " +
+                    event.error;
+            }
+
+
+            isListening = false;
+
+            removeListening();
+        };
+
+
+    recognition.onend =
+        function(){
+
+            isListening = false;
+
+            removeListening();
+
+            console.log(
+                "Recognition ended."
+            );
+        };
+
+
+    try{
+
+        recognition.start();
+
+    }catch(error){
+
+        console.log(
+            "Recognition start error:",
+            error
+        );
+
+        isListening = false;
+
+        removeListening();
+
+        status.innerText =
+            "Could not start microphone.";
+    }
+}
+
+
+/* =========================================================
+   STOP LISTENING
+========================================================= */
+
+function stopListening(){
+
+    if(
+        recognition &&
+        isListening
+    ){
+
+        try{
+
+            recognition.stop();
+
+        }catch(error){
+
+            console.log(
+                error
+            );
+        }
+    }
+
+
+    isListening = false;
+
+    removeListening();
+
+
+    status.innerText =
+        isAwake
+        ? "SHREE is ready."
+        : "SHREE is sleeping...";
+}
+
+
+/* =========================================================
+   TIME
+========================================================= */
+
+function tellTime(){
+
+    const now =
+        new Date();
+
+
+    const time =
+        now.toLocaleTimeString(
+            "en-US",
+            {
+                hour:"numeric",
+                minute:"2-digit",
+                hour12:true
+            }
+        );
+
+
+    status.innerText =
+        "⏰ Time: " +
+        time;
+
+
+    speak(
+        "Sir, the current time is " +
+        time
+    );
+}
+
+
+/* =========================================================
+   DATE
+========================================================= */
+
+function tellDate(){
+
+    const now =
+        new Date();
+
+
+    const date =
+        now.toLocaleDateString(
+            "en-US",
+            {
+                weekday:"long",
+                day:"numeric",
+                month:"long",
+                year:"numeric"
+            }
+        );
+
+
+    status.innerText =
+        "📅 " +
+        date;
+
+
+    speak(
+        "Sir, today is " +
+        date
+    );
+}
+
+
+/* =========================================================
+   OPEN WEBSITE
+========================================================= */
+
+function openWebsite(
+    url,
+    name
+){
+
+    status.innerText =
+        "Opening " +
+        name +
+        "...";
+
+
+    speak(
+        "Yes sir. Opening " +
+        name
+    );
+
+
+    setTimeout(
+        function(){
+
+            window.open(
+                url,
+                "_blank"
+            );
+
+        },
+        800
+    );
+}
+
+
+/* =========================================================
+   GOOGLE SEARCH
+========================================================= */
+
+function googleSearch(
+    query
+){
+
+    const url =
+        "https://www.google.com/search?q=" +
+        encodeURIComponent(query);
+
+
+    status.innerText =
+        "Searching Google...";
+
+
+    speak(
+        "Searching Google for " +
+        query
+    );
+
+
+    setTimeout(
+        function(){
+
+            window.open(
+                url,
+                "_blank"
+            );
+
+        },
+        800
+    );
+}
+
+
+/* =========================================================
+   YOUTUBE SEARCH
+========================================================= */
+
+function youtubeSearch(
+    query
+){
+
+    const url =
+        "https://www.youtube.com/results?search_query=" +
+        encodeURIComponent(query);
+
+
+    status.innerText =
+        "Searching YouTube...";
+
+
+    speak(
+        "Searching YouTube for " +
+        query
+    );
+
+
+    setTimeout(
+        function(){
+
+            window.open(
+                url,
+                "_blank"
+            );
+
+        },
+        800
+    );
+}
+
+
+/* =========================================================
+   COMMAND PROCESSING
+========================================================= */
+
+function processCommand(
+    command
+){
+
+    /* WAKE */
+
+    if(
+        command.includes("shree") &&
+        (
+            command.includes("wake") ||
+            command.includes("wake up")
+        )
+    ){
+
+        wakeShree();
+
+        return;
+    }
+
+
+    /* HELLO */
+
+    if(
+        command.includes("hello") ||
+        command === "hi" ||
+        command.includes("hey shree")
+    ){
+
+        isAwake = true;
+
+        core.classList.add(
+            "awake"
+        );
+
+        status.innerText =
+            "SHREE is ready.";
+
+        speak(
+            "Hello sir. How can I help you?"
+        );
+
+        return;
+    }
+
+
+    /* TIME */
+
+    if(
+        command.includes("time") ||
+        command.includes("what time")
+    ){
+
+        tellTime();
+
+        return;
+    }
+
+
+    /* DATE */
+
+    if(
+        command.includes("date") ||
+        command.includes("today") ||
+        command.includes("what day")
+    ){
+
+        tellDate();
+
+        return;
+    }
+
+
+    /* OPEN YOUTUBE */
+
+    if(
+        command === "youtube" ||
+        command.includes("open youtube")
+    ){
+
+        openWebsite(
+            "https://www.youtube.com",
+            "YouTube"
+        );
+
+        return;
+    }
+
+
+    /* SEARCH YOUTUBE */
+
+    if(
+        command.startsWith(
+            "search youtube"
+        )
+    ){
+
+        const query =
+            command
+                .replace(
+                    "search youtube",
+                    ""
+                )
+                .trim();
+
+
+        if(query){
+
+            youtubeSearch(
+                query
+            );
+
+        }else{
+
+            speak(
+                "What should I search on YouTube?"
+            );
+        }
+
+        return;
+    }
+
+
+    /* OPEN GOOGLE */
+
+    if(
+        command === "google" ||
+        command.includes("open google")
+    ){
+
+        openWebsite(
+            "https://www.google.com",
+            "Google"
+        );
+
+        return;
+    }
+
+
+    /* SEARCH GOOGLE */
+
+    if(
+        command.startsWith(
+            "search google"
+        )
+    ){
+
+        const query =
+            command
+                .replace(
+                    "search google",
+                    ""
+                )
+                .trim();
+
+
+        if(query){
+
+            googleSearch(
+                query
+            );
+
+        }else{
+
+            speak(
+                "What should I search on Google?"
+            );
+        }
+
+        return;
+    }
+
+
+    /* OPEN INSTAGRAM */
+
+    if(
+        command === "instagram" ||
+        command.includes("open instagram")
+    ){
+
+        openWebsite(
+            "https://www.instagram.com",
+            "Instagram"
+        );
+
+        return;
+    }
+
+
+    /* WHO ARE YOU */
+
+    if(
+        command.includes(
+            "who are you"
+        )
+    ){
+
+        speak(
+            "I am SHREE, your personal AI assistant."
+        );
+
+        return;
+    }
+
+
+    /* FAVOURITE PERSON */
+
+    if(
+        command.includes(
+            "who is my favourite person"
+        )
+    ){
+
+        speak(
+            " miss  Rashii ji,"
+        );
+
+        return;
+    }
+
+
+    /* THANK YOU */
+
+    if(
+        command.includes("thank you") ||
+        command.includes("thanks")
+    ){
+
+        speak(
+            "You're welcome sir."
+        );
+
+        return;
+    }
+
+
+    /* SLEEP */
+
+    if(
+        command.includes("sleep") ||
+        command.includes("good night") ||
+        command.includes("shut down")
+    ){
+
+        isAwake = false;
+
+        core.classList.remove(
+            "awake"
+        );
+
+        speak(
+            "Okay sir. SHREE is going to sleep."
+        );
+
+        return;
+    }
+
+
+    /* UNKNOWN COMMAND */
+
+    speak(
+        "Sorry ritik sir. I heard you, but I don't have that command yet."
+    );
+}
+
+
+/* =========================================================
+   LOADED
+========================================================= */
+
+console.log(
+    "SHREE AI loaded successfully."
+);
+
+</script>
+
+</body>
+</html
